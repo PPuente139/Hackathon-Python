@@ -1,123 +1,187 @@
-import streamlit as st
-import time
 import re
 import streamlit as st
 from google import genai
 
-# --- SEITEN-SETUP ---
-st.set_page_config(page_title="FC Köln Newsletter Generator", page_icon="🐐", layout="centered")
+# ==========================================
+# 1. PAGE CONFIG & EFFZEH STYLING
+# ==========================================
+st.set_page_config(
+    page_title="1. FC Köln Content Generator",
+    page_icon="🐐",
+    layout="wide"
+)
 
-st.title("🐐 1. FC Köln Content Generator")
-st.caption("Interaktives Tool für den Fachbereich – Generierung via Gemini (ohne API-Key)")
+# Custom CSS für den FC Köln Look (Rot/Weiß/Dunkel)
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #FFFFFF;
+        margin-bottom: 0.2rem;
+    }
+    .sub-header {
+        font-size: 1.0rem;
+        color: #AAAAAA;
+        margin-bottom: 1.8rem;
+    }
+    /* Effzeh-Rot für den Primärbutton */
+    .stButton>button {
+        background-color: #ED1C24 !important;
+        color: white !important;
+        font-weight: bold !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.6rem 1.2rem !important;
+        width: 100% !important;
+        box-shadow: 0 4px 10px rgba(237, 28, 36, 0.3);
+    }
+    .stButton>button:hover {
+        background-color: #C11219 !important;
+        color: white !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# --- INPUTS ---
-col1, col2 = st.columns(2)
-with col1:
-    kategorie = st.selectbox("Kategorie:", ["Vereinsgeschichte & Tradition", "Aktuelle Saison", "Taktik & Analysen", "Kurioses"])
-with col2:
-    tonfall = st.selectbox("Tonfall:", ["Begeisternd & Fan-nah", "Professionell & Analytisch", "Humorvoll"])
 
-spezifisches_thema = st.text_input("Spezifisches Thema / Wunsch (optional):", placeholder="z. B. Hennes, Das Stadion, Meisterjahr 1978")
+# ==========================================
+# 2. GEMINI API SETUP
+# ==========================================
+@st.cache_resource
+def get_gemini_client():
+    """Lädt den Client sicher aus den Streamlit Secrets."""
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("⚠️ Keinen 'GEMINI_API_KEY' in den Streamlit Secrets gefunden! Bitte unter Settings -> Secrets hinterlegen.")
+        st.stop()
+    return genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# --- PLAYWRIGHT AUTOMATION ---
-def generate_with_playwright(kategorie, tonfall, thema):
-    prompt_text = f"""Generiere einen spannenden Beitrag über den 1. FC Köln.
-Kategorie: {kategorie}
-Tonfall: {tonfall}
-Thema: {thema if thema else 'Wähle einen überraschenden Fakt'}
 
-Gib das Ergebnis AUSSCHLIESSLICH als XML-Codeblock im folgenden Schema aus (OHNE deinen eigenen Senf davor/danach, verwende keine & Zeichen):
+def generate_fc_content(kategorie, tonfall, thema_wunsch):
+    """Ruft die Gemini API für FC Köln Content auf."""
+    client = get_gemini_client()
 
-<funfact>
-  <titel>Prägnanter Titel</titel>
-  <kategorie>{kategorie}</kategorie>
-  <fakt>Ausführlicher, spannender Text im gewünschten Tonfall.</fakt>
-  <fazit>Ein kurzes Fazit oder eine Pointe.</fazit>
-</funfact>"""
+    prompt = f"""
+    Du bist der offizielle und leidenschaftliche Content- und Newsletter-Generator für den 1. FC Köln.
+    Erstelle einen mitreißenden Content-Beitrag / Newsletter-Karte.
 
-    with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            user_data_dir="./browser_profile",
-            headless=False  # Auf True setzen, wenn der Browser unsichtbar im Hintergrund laufen soll!
+    VORGABEN:
+    - Kategorie: {kategorie}
+    - Tonfall: {tonfall}
+    - Spezifisches Thema / Wunsch: {thema_wunsch if thema_wunsch else "Kein spezieller Wunsch, wähle etwas Passendes zur Kategorie"}
+
+    OUTPUT-FORMAT:
+    Antworte AUSSCHLIESSLICH mit folgendem XML-Schema, damit die Daten sauber geparst werden können:
+
+    <newsletter>
+        <titel>Eine knackige, emotionale Überschrift mit Effzeh-Bezug</titel>
+        <intro>Eine mitreißende Einleitung (2-3 Sätze)</intro>
+        <hauptteil>Der Hauptinhalt in gut lesbaren Absätzen. Erwähne historische Details, Anekdoten oder Fakten wenn passend.</hauptteil>
+        <funfact>Ein lustiger oder überraschender Funfact zum FC Köln oder dem Thema</funfact>
+        <call_to_action>Ein motivierender Aufruf an die Fans (z. B. 'Come on, FC!')</call_to_action>
+    </newsletter>
+    """
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
         )
-        page = context.new_page()
-        page.goto("https://gemini.google.com")
-        
-        input_selector = ".ql-editor, div[contenteditable='true']"
-        page.wait_for_selector(input_selector, timeout=30000)
-        
-        page.focus(input_selector)
-        page.fill(input_selector, prompt_text)
-        time.sleep(1)
-        page.keyboard.press("Enter")
-        
-        # Warten auf Generierung
-        time.sleep(22)
-        
-        code_elements = page.query_selector_all("pre, code, .code-block")
-        found_xml = ""
-        
-        for elem in reversed(code_elements):
-            text = elem.inner_text()
-            if "<funfact>" in text and "Prägnanter Titel" not in text:
-                found_xml = text
-                break
-                
-        if not found_xml:
-            full_text = page.inner_text("body")
-            matches = re.findall(r'<funfact>.*?</funfact>', full_text, re.DOTALL)
-            for m in reversed(matches):
-                if "Prägnanter Titel" not in m:
-                    found_xml = m
-                    break
-                    
-        context.close()
-        return found_xml
+        return response.text
+    except Exception as e:
+        st.error(f"Fehler bei der API-Anfrage: {e}")
+        return None
 
-# --- GENERATIONS-BUTTON ---
-if st.button("🚀 Newsletter-Karte generieren", type="primary"):
-    with st.spinner("🤖 Playwright öffnet Gemini und generiert den Inhalt... Bitte warten..."):
-        try:
-            xml_response = generate_with_playwright(kategorie, tonfall, spezifisches_thema)
+
+# ==========================================
+# 3. HELPER FUNCTIONS
+# ==========================================
+def parse_xml_tag(text, tag_name):
+    """Extrahiert Inhalte aus den XML-Tags."""
+    match = re.search(f"<{tag_name}>(.*?)</{tag_name}>", text, re.DOTALL)
+    return match.group(1).strip() if match else ""
+
+
+def build_html_card(titel, intro, hauptteil, funfact, cta):
+    """Baut eine schicke rot-weiße HTML-Newsletter-Karte."""
+    return f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; border: 2px solid #ED1C24; border-radius: 12px; padding: 25px; background-color: #ffffff; color: #222222; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f0f0f0; padding-bottom: 12px; margin-bottom: 15px;">
+            <h2 style="color: #ED1C24; margin: 0; font-size: 22px; font-weight: 800;">{titel}</h2>
+            <span style="font-size: 24px;">🐐</span>
+        </div>
+        <p style="font-size: 15px; color: #333333; line-height: 1.5; font-weight: 600;">{intro}</p>
+        <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 15px 0;">
+        <div style="font-size: 14px; color: #444444; line-height: 1.6;">{hauptteil}</div>
+        
+        {f'<div style="background-color: #fff0f0; border-left: 4px solid #ED1C24; padding: 12px; margin: 20px 0; font-size: 13px; color: #990000;"><strong>💡 Wusstest du schon?</strong> {funfact}</div>' if funfact else ''}
+        
+        <div style="text-align: center; margin-top: 25px;">
+            <a href="#" style="background-color: #ED1C24; color: white; padding: 10px 22px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; display: inline-block;">{cta}</a>
+        </div>
+    </div>
+    """
+
+
+# ==========================================
+# 4. STREAMLIT UI
+# ==========================================
+st.markdown('<div class="main-header">🐐 1. FC Köln Content Generator</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Interaktives Tool für den Fachbereich – Generierung via Gemini (ohne API-Key im Frontend)</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    kategorie = st.selectbox(
+        "Kategorie:",
+        [
+            "Vereinsgeschichte & Tradition",
+            "Spieltags-Vorschau & Analyse",
+            "Fan-Aktionen & Kurvennews",
+            "Jugend- & Nachwuchsförderung"
+        ]
+    )
+
+with col2:
+    tonfall = st.selectbox(
+        "Tonfall:",
+        ["Humorvoll", "Leidenschaftlich & Emotional", "Sachlich & Analytisch", "Kölsch & Locker"]
+    )
+
+thema_wunsch = st.text_input(
+    "Spezifisches Thema / Wunsch (optional):",
+    placeholder="z. B. Maniche, Podolski, Müngersdorf, Aufstieg 1978..."
+)
+
+st.write("") # Abstand
+btn_generate = st.button("🚀 Newsletter-Karte generieren")
+
+st.markdown("---")
+
+# --- ERGEBNIS-ANZEIGE ---
+if btn_generate:
+    with st.spinner("Geißbock Gemini durchsucht die Annalen des Effzeh..."):
+        raw_response = generate_fc_content(kategorie, tonfall, thema_wunsch)
+        
+        if raw_response:
+            titel = parse_xml_tag(raw_response, "titel") or "1. FC Köln News"
+            intro = parse_xml_tag(raw_response, "intro")
+            hauptteil = parse_xml_tag(raw_response, "hauptteil")
+            funfact = parse_xml_tag(raw_response, "funfact")
+            cta = parse_xml_tag(raw_response, "call_to_action") or "Come on, FC!"
             
-            if xml_response:
-                def get_tag(tag, default=""):
-                    m = re.search(f'<{tag}>(.*?)</{tag}>', xml_response, re.DOTALL)
-                    return m.group(1).strip() if m else default
+            html_code = build_html_card(titel, intro, hauptteil, funfact, cta)
+            st.session_state["generated_html"] = html_code
 
-                titel = get_tag('titel', '1. FC Köln Update')
-                kat = get_tag('kategorie', kategorie)
-                fakt = get_tag('fakt', 'Kein Text generiert.')
-                fazit = get_tag('fazit', '')
-
-                # HTML-Karte zusammenbauen
-                html_code = f"""
-                <div style="background: white; border-radius: 16px; border: 1px solid #e2e8f0; max-width: 500px; margin: 20px auto; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.08); font-family: sans-serif;">
-                    <div style="background: linear-gradient(135deg, #e11d48 0%, #9f1239 100%); color: white; padding: 24px; text-align: center;">
-                        <span style="background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase;">{kat}</span>
-                        <h2 style="margin: 12px 0 0 0; font-size: 22px; color: white;">🐐 {titel}</h2>
-                    </div>
-                    <div style="padding: 28px; line-height: 1.6; color: #334155;">
-                        <p style="font-size: 16px;">{fakt}</p>
-                        {'<div style="background: #fff7ed; border-left: 4px solid #f97316; padding: 12px; margin-top: 15px; border-radius: 0 8px 8px 0; color: #c2410c;">💡 <strong>Fazit:</strong> ' + fazit + '</div>' if fazit else ''}
-                    </div>
-                    <div style="text-align: center; padding: 12px; background: #f1f5f9; font-size: 12px; color: #64748b;">
-                        Generiert für den Fachbereich
-                    </div>
-                </div>
-                """
-                
-                st.success("Erfolgreich generiert!")
-                st.markdown(html_code, unsafe_allow_html=True)
-                
-                st.download_button(
-                    label="📥 HTML-Karte herunterladen",
-                    data=html_code,
-                    file_name="fc_newsletter_card.html",
-                    mime="text/html"
-                )
-            else:
-                st.error("Es konnte kein valider Text aus Gemini ausgelesen werden. Bitte erneut versuchen.")
-                
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+if "generated_html" in st.session_state:
+    st.subheader("Generierte Newsletter-Karte:")
+    
+    # Rendered HTML Card
+    st.components.v1.html(st.session_state["generated_html"], height=480, scrolling=True)
+    
+    # Download Button
+    st.download_button(
+        label="💾 HTML-Vorlage herunterladen",
+        data=st.session_state["generated_html"],
+        file_name="fc_koeln_newsletter.html",
+        mime="text/html"
+    )
