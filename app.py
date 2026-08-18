@@ -64,7 +64,7 @@ def get_gemini_client():
 
 def generate_fc_content(kategorie, tonfall, thema_wunsch):
     """Ruft die  API für FC Köln Content auf."""
-    client = get__client()
+    client = get_gemini_client()
 
     prompt = f"""
     Du bist der offizielle und leidenschaftliche Content- und Newsletter-Generator für den 1. FC Köln.
