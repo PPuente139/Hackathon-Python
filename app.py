@@ -48,12 +48,18 @@ st.markdown("""
 # 2.  API SETUP
 # ==========================================
 @st.cache_resource
-def get__client():
-    """Lädt den Client sicher aus den Streamlit Secrets."""
-    if "_API_KEY" not in st.secrets:
-        st.error("⚠️ Keinen '_API_KEY' in den Streamlit Secrets gefunden! Bitte unter Settings -> Secrets hinterlegen.")
-        st.stop()
-    return genai.Client(api_key=st.secrets["_API_KEY"])
+def get_gemini_client():
+    # Wir holen den Key direkt aus den Secrets
+    if "GEMINI_API_KEY" in st.secrets:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    elif "API_KEY" in st.secrets:
+        api_key = st.secrets["API_KEY"]
+    else:
+        # FALLBACK: Falls Streamlit Secrets zicken, trage deinen AQ...-Key direkt hier ein
+        api_key = "AQ...DEIN_VOLLSTÄNDIGER_KEY"
+
+    # Initialisierung des Clients
+    return genai.Client(api_key=api_key)
 
 
 def generate_fc_content(kategorie, tonfall, thema_wunsch):
@@ -83,7 +89,7 @@ def generate_fc_content(kategorie, tonfall, thema_wunsch):
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-1.5-flash",
             contents=prompt,
         )
         return response.text
