@@ -45,20 +45,20 @@ st.markdown("""
 
 
 # ==========================================
-# 2. GEMINI API SETUP
+# 2.  API SETUP
 # ==========================================
 @st.cache_resource
-def get_gemini_client():
+def get__client():
     """Lädt den Client sicher aus den Streamlit Secrets."""
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.error("⚠️ Keinen 'GEMINI_API_KEY' in den Streamlit Secrets gefunden! Bitte unter Settings -> Secrets hinterlegen.")
+    if "_API_KEY" not in st.secrets:
+        st.error("⚠️ Keinen '_API_KEY' in den Streamlit Secrets gefunden! Bitte unter Settings -> Secrets hinterlegen.")
         st.stop()
-    return genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    return genai.Client(api_key=st.secrets["_API_KEY"])
 
 
 def generate_fc_content(kategorie, tonfall, thema_wunsch):
-    """Ruft die Gemini API für FC Köln Content auf."""
-    client = get_gemini_client()
+    """Ruft die  API für FC Köln Content auf."""
+    client = get__client()
 
     prompt = f"""
     Du bist der offizielle und leidenschaftliche Content- und Newsletter-Generator für den 1. FC Köln.
@@ -83,7 +83,7 @@ def generate_fc_content(kategorie, tonfall, thema_wunsch):
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt,
         )
         return response.text
@@ -126,7 +126,7 @@ def build_html_card(titel, intro, hauptteil, funfact, cta):
 # 4. STREAMLIT UI
 # ==========================================
 st.markdown('<div class="main-header">🐐 1. FC Köln Content Generator</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Interaktives Tool für den Fachbereich – Generierung via Gemini (ohne API-Key im Frontend)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Interaktives Tool für den Fachbereich – Generierung via  (ohne API-Key im Frontend)</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
@@ -159,7 +159,7 @@ st.markdown("---")
 
 # --- ERGEBNIS-ANZEIGE ---
 if btn_generate:
-    with st.spinner("Geißbock Gemini durchsucht die Annalen des Effzeh..."):
+    with st.spinner("Geißbock  durchsucht die Annalen des Effzeh..."):
         raw_response = generate_fc_content(kategorie, tonfall, thema_wunsch)
         
         if raw_response:
